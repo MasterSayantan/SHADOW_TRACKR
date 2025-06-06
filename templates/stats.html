@@ -172,8 +172,8 @@
         <tr>
           <td>{{ visit.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</td>
           <td>{{ visit.ip_address }}</td>
-          <td>{{ visit.country }}</td>
-          <td>{{ visit.city }}</td>
+          <td>{{ visit.country | default('N/A', true) }}</td>
+          <td>{{ visit.city | default('N/A', true) }}</td>
           <td>{{ visit.browser }}</td>
           <td>{{ visit.os }}</td>
           <td>{{ visit.referrer or 'Direct' }}</td>
@@ -261,6 +261,32 @@
 
         function addDetailRow(key, value) {
           if (!value || value.toLowerCase() === 'unknown' || value === '') return;
+
+          // Sanitize unsupported field strings
+          const unsupportedStrings = [
+            "Field 'region' is not supported",
+            "Field 'region_code' is not supported",
+            "Field 'postal' is not supported",
+            "Field 'timezone' is not supported",
+            "Field 'country_code' is not supported",
+            "Field 'in_eu' is not supported",
+            "Field 'country_area' is not supported",
+            "Field 'country_population' is not supported"
+          ];
+
+          // Decode HTML entities
+          function decodeHtml(html) {
+            var txt = document.createElement("textarea");
+            txt.innerHTML = html;
+            return txt.value;
+          }
+
+          const decodedValue = decodeHtml(value);
+
+          if (unsupportedStrings.includes(decodedValue)) {
+            return; // Skip unsupported fields
+          }
+
           const row = document.createElement('tr');
           const keyCell = document.createElement('td');
           keyCell.style.fontWeight = 'bold';
@@ -269,10 +295,10 @@
           const valueCell = document.createElement('td');
           valueCell.style.padding = '4px 8px';
           // Format latitude and longitude to fixed 6 decimal places if numeric
-          if ((key.toLowerCase() === 'latitude' || key.toLowerCase() === 'longitude') && !isNaN(parseFloat(value))) {
-            valueCell.textContent = parseFloat(value).toFixed(6);
+          if ((key.toLowerCase() === 'latitude' || key.toLowerCase() === 'longitude') && !isNaN(parseFloat(decodedValue))) {
+            valueCell.textContent = parseFloat(decodedValue).toFixed(6);
           } else {
-            valueCell.textContent = value;
+            valueCell.textContent = decodedValue;
           }
           row.appendChild(keyCell);
           row.appendChild(valueCell);
