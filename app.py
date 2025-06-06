@@ -203,7 +203,8 @@ def get_ip_info(ip):
                             missing_or_unknown = True
                             break
                     if missing_or_unknown:
-                        logging.warning(f"❌ Incomplete geodata for IP {ip}: {data}")
+                        # Further reduce log level or customize message for incomplete geodata
+                        logging.info(f"Incomplete geodata for IP {ip}, some fields may be missing or unsupported.")
                     else:
                         summary = f"✅ Geolocation success: {data.get('city', '')}, {data.get('region', '')}, {data.get('isp', '')}"
                         logging.info(summary)
