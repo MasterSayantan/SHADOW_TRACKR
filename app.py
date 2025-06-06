@@ -128,126 +128,134 @@ def get_ip_info(ip):
             info['longitude'] = ''
             _ip_info_cache[ip] = info
             return info
-        for attempt in range(2):  # Try twice
-            try:
-                response = requests.get(f'https://ipapi.co/{ip}/json/')
+        ipapi_quota_exceeded = False
+        ipinfo_quota_exceeded = False
+        # Try ipapi.co API first, skip if quota exceeded
+        if not ipapi_quota_exceeded:
+            for attempt in range(2):  # Try twice
+                try:
+                    response = requests.get(f'https://ipapi.co/{ip}/json/')
+                    if response.status_code == 429:
+                        logging.error(f"API quota exceeded for ipapi.co on IP {ip}")
+                        ipapi_quota_exceeded = True
+                        break
+                    elif response.status_code == 200:
+                        data = response.json()
+                        info['country'] = data.get('country_name', 'Unknown') or 'Unknown'
+                        info['city'] = data.get('city', 'Unknown') or 'Unknown'
+                        info['region'] = data.get('state_prov', '') or ''
+                        info['region_code'] = data.get('state_code', '') or ''
+                        info['postal_code'] = data.get('zipcode', '') or ''
+                        info['network'] = data.get('network', '') or ''
+                        info['asn'] = data.get('asn', '') or ''
+                        info['hostname'] = data.get('hostname', 'Unknown') or 'Unknown'
+                        info['isp'] = data.get('org', 'Unknown') or 'Unknown'
+                        info['latitude'] = str(data.get('latitude', '')) or ''
+                        info['longitude'] = str(data.get('longitude', '')) or ''
+                        info['utc_offset'] = data.get('time_zone', {}).get('offset', '') or ''
+                        info['country_iso_code'] = data.get('country_code2', '') or ''
+                        info['capital'] = data.get('country_capital', '') or ''
+                        info['tld'] = data.get('country_tld', '') or ''
+                        info['continent'] = data.get('continent_code', '') or ''
+                        info['eu'] = data.get('is_eu', False) or ''
+                        currency_data = data.get('currency', '')
+                        if isinstance(currency_data, dict):
+                            info['currency'] = currency_data.get('code', '')
+                        else:
+                            info['currency'] = str(currency_data)
+
+                        # Ensure country_area is string, not dict
+                        country_area_data = data.get('country_area', '')
+                        if isinstance(country_area_data, dict):
+                            info['country_area'] = ''
+                        else:
+                            info['country_area'] = str(country_area_data)
+
+                        # Ensure postal_code is string, not dict
+                        postal_code_data = data.get('postal_code', '')
+                        if isinstance(postal_code_data, dict):
+                            info['postal_code'] = ''
+                        else:
+                            info['postal_code'] = str(postal_code_data)
+
+                        # Ensure country_population is string, not dict
+                        country_population_data = data.get('country_population', '')
+                        if isinstance(country_population_data, dict):
+                            info['country_population'] = ''
+                        else:
+                            info['country_population'] = str(country_population_data)
+
+                        # Ensure eu is string
+                        eu_data = data.get('is_eu', '')
+                        if isinstance(eu_data, bool):
+                            info['eu'] = str(eu_data)
+                        else:
+                            info['eu'] = str(eu_data) if eu_data else ''
+
+                        # Ensure utc_offset is string
+                        timezone_data = data.get('time_zone', '')
+                        if isinstance(timezone_data, dict):
+                            info['utc_offset'] = timezone_data.get('offset', '')
+                        else:
+                            info['utc_offset'] = str(timezone_data) if timezone_data else ''
+
+                        # Add debug log for full API response
+                        import json
+                        logging.debug(f"Full API response for IP {ip}: {json.dumps(data)}")
+
+                        # Check for incomplete data
+                        required_fields = ['city', 'region', 'country_name', 'latitude', 'longitude', 'asn', 'org']
+                        missing_or_unknown = False
+                        for field in required_fields:
+                            value = data.get(field)
+                            if not value or (isinstance(value, str) and value.strip().lower() == 'unknown'):
+                                missing_or_unknown = True
+                                break
+                        if missing_or_unknown:
+                            logging.warning(f"❌ Incomplete geodata for IP {ip}: {data}")
+                        else:
+                            summary = f"✅ Geolocation success: {data.get('city', '')}, {data.get('region', '')}, {data.get('org', '')}"
+                            logging.info(summary)
+                            _ip_info_cache[ip] = info
+                            return info
+                except requests.exceptions.RequestException as e:
+                    logging.error(f"Request failed: {e}")
+                if attempt == 0:
+                    time.sleep(1)  # Wait before retry
+        # Fallback to ipinfo.io API if ipapi.co quota exceeded or incomplete data
+        if ipapi_quota_exceeded or info['city'] == 'Unknown' or info['city'] == '':
+            if not ipinfo_quota_exceeded:
+                response = requests.get(f'https://ipinfo.io/{ip}/json')
                 if response.status_code == 429:
-                    logging.error(f"API quota exceeded for ipapi.co on IP {ip}")
-                    break
+                    logging.error(f"API quota exceeded for ipinfo.io on IP {ip}")
+                    ipinfo_quota_exceeded = True
                 elif response.status_code == 200:
                     data = response.json()
-                    info['country'] = data.get('country_name', 'Unknown') or 'Unknown'
-                    info['city'] = data.get('city', 'Unknown') or 'Unknown'
-                    info['region'] = data.get('state_prov', '') or ''
-                    info['region_code'] = data.get('state_code', '') or ''
-                    info['postal_code'] = data.get('zipcode', '') or ''
-                    info['network'] = data.get('network', '') or ''
-                    info['asn'] = data.get('asn', '') or ''
-                    info['hostname'] = data.get('hostname', 'Unknown') or 'Unknown'
-                    info['isp'] = data.get('org', 'Unknown') or 'Unknown'
-                    info['latitude'] = str(data.get('latitude', '')) or ''
-                    info['longitude'] = str(data.get('longitude', '')) or ''
-                    info['utc_offset'] = data.get('time_zone', {}).get('offset', '') or ''
-                    info['country_iso_code'] = data.get('country_code2', '') or ''
-                    info['capital'] = data.get('country_capital', '') or ''
-                    info['tld'] = data.get('country_tld', '') or ''
-                    info['continent'] = data.get('continent_code', '') or ''
-                    info['eu'] = data.get('is_eu', False) or ''
-                    currency_data = data.get('currency', '')
-                    if isinstance(currency_data, dict):
-                        info['currency'] = currency_data.get('code', '')
-                    else:
-                        info['currency'] = str(currency_data)
-
-                    # Ensure country_area is string, not dict
-                    country_area_data = data.get('country_area', '')
-                    if isinstance(country_area_data, dict):
-                        info['country_area'] = ''
-                    else:
-                        info['country_area'] = str(country_area_data)
-
-                    # Ensure postal_code is string, not dict
-                    postal_code_data = data.get('postal_code', '')
-                    if isinstance(postal_code_data, dict):
-                        info['postal_code'] = ''
-                    else:
-                        info['postal_code'] = str(postal_code_data)
-
-                    # Ensure country_population is string, not dict
-                    country_population_data = data.get('country_population', '')
-                    if isinstance(country_population_data, dict):
-                        info['country_population'] = ''
-                    else:
-                        info['country_population'] = str(country_population_data)
-
-                    # Ensure eu is string
-                    eu_data = data.get('is_eu', '')
-                    if isinstance(eu_data, bool):
-                        info['eu'] = str(eu_data)
-                    else:
-                        info['eu'] = str(eu_data) if eu_data else ''
-
-                    # Ensure utc_offset is string
-                    timezone_data = data.get('time_zone', '')
-                    if isinstance(timezone_data, dict):
-                        info['utc_offset'] = timezone_data.get('offset', '')
-                    else:
-                        info['utc_offset'] = str(timezone_data) if timezone_data else ''
-
-                    # Add debug log for full API response
-                    import json
-                    logging.debug(f"Full API response for IP {ip}: {json.dumps(data)}")
-
-                    # Check for incomplete data
-                    required_fields = ['city', 'region', 'country_name', 'latitude', 'longitude', 'asn', 'org']
-                    missing_or_unknown = False
-                    for field in required_fields:
-                        value = data.get(field)
-                        if not value or (isinstance(value, str) and value.strip().lower() == 'unknown'):
-                            missing_or_unknown = True
-                            break
-                    if missing_or_unknown:
-                        logging.warning(f"❌ Incomplete geodata for IP {ip}: {data}")
-                    else:
-                        summary = f"✅ Geolocation success: {data.get('city', '')}, {data.get('region', '')}, {data.get('org', '')}"
-                        logging.info(summary)
-                        _ip_info_cache[ip] = info
-                        return info
-            except requests.exceptions.RequestException as e:
-                logging.error(f"Request failed: {e}")
-            if attempt == 0:
-                time.sleep(1)  # Wait before retry
-        # Fallback to ipinfo.io API
-        response = requests.get(f'https://ipinfo.io/{ip}/json')
-        if response.status_code == 200:
-            data = response.json()
-            info['country'] = data.get('country', info['country'])
-            city_region = data.get('city', '') + ', ' + data.get('region', '')
-            info['city'] = city_region.strip(', ') if city_region.strip(', ') else info['city']
-            info['hostname'] = data.get('hostname', info['hostname'])
-            info['isp'] = data.get('org', info['isp'])
-            loc = data.get('loc', '')
-            if loc:
-                lat_long = loc.split(',')
-                if len(lat_long) == 2:
-                    info['latitude'] = lat_long[0]
-                    info['longitude'] = lat_long[1]
-            info['region'] = data.get('region', info['region'])
-            info['region_code'] = data.get('region_code', info['region_code'])
-            info['postal_code'] = data.get('postal', info['postal_code'])
-            info['utc_offset'] = data.get('timezone', info['utc_offset'])
-            info['country_iso_code'] = data.get('country', info['country_iso_code'])
-            info['capital'] = data.get('country_capital', info['capital'])
-            info['tld'] = data.get('country_tld', info['tld'])
-            info['continent'] = data.get('continent_code', info['continent'])
-            info['eu'] = data.get('in_eu', info['eu'])
-            info['currency'] = data.get('currency', info['currency'])
-            info['country_area'] = data.get('country_area', info['country_area'])
-            info['country_population'] = data.get('country_population', info['country_population'])
-        elif response.status_code == 429:
-            logging.error(f"API quota exceeded for ipinfo.io on IP {ip}")
+                    info['country'] = data.get('country', info['country'])
+                    city_region = data.get('city', '') + ', ' + data.get('region', '')
+                    info['city'] = city_region.strip(', ') if city_region.strip(', ') else info['city']
+                    info['hostname'] = data.get('hostname', info['hostname'])
+                    info['isp'] = data.get('org', info['isp'])
+                    loc = data.get('loc', '')
+                    if loc:
+                        lat_long = loc.split(',')
+                        if len(lat_long) == 2:
+                            info['latitude'] = lat_long[0]
+                            info['longitude'] = lat_long[1]
+                    info['region'] = data.get('region', info['region'])
+                    info['region_code'] = data.get('region_code', info['region_code'])
+                    info['postal_code'] = data.get('postal', info['postal_code'])
+                    info['utc_offset'] = data.get('timezone', info['utc_offset'])
+                    info['country_iso_code'] = data.get('country', info['country_iso_code'])
+                    info['capital'] = data.get('country_capital', info['capital'])
+                    info['tld'] = data.get('country_tld', info['tld'])
+                    info['continent'] = data.get('continent_code', info['continent'])
+                    info['eu'] = data.get('in_eu', info['eu'])
+                    info['currency'] = data.get('currency', info['currency'])
+                    info['country_area'] = data.get('country_area', info['country_area'])
+                    info['country_population'] = data.get('country_population', info['country_population'])
         # Additional fallback to ipgeolocation.io API for better city accuracy.
-        if info['city'] == 'Unknown' or info['city'] == '':
+        if (ipapi_quota_exceeded or ipinfo_quota_exceeded) or info['city'] == 'Unknown' or info['city'] == '':
             if API_KEY:
                 response = requests.get(f'https://api.ipgeolocation.io/ipgeo?apiKey={API_KEY}&ip={ip}&fields=city,country_name,isp,hostname,latitude,longitude,region,region_code,postal,timezone,country_code,country_capital,country_tld,continent_code,in_eu,currency,country_area,country_population,asn')
                 if response.status_code == 200:
@@ -361,13 +369,16 @@ def index():
         return render_template('index.html', short_url=url_for('track', short_id=urlmap.short_id, _external=True))
     return render_template('index.html')
 
+import html
+
 def safe_str(value):
     if isinstance(value, dict):
         logging.warning(f"Converting dict to string for value: {value}")
-        return str(value)
+        value = str(value)
     if value is None:
         return ''
-    return str(value)
+    # Decode HTML entities to proper characters
+    return html.unescape(str(value))
 
 @app.route('/track/<short_id>')
 def track(short_id):
