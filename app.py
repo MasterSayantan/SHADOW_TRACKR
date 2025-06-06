@@ -417,8 +417,22 @@ def sanitize_value(val):
         return ', '.join(map(str, val))
     elif val is None:
         return ''
-    elif isinstance(val, str) and val.startswith("Field '") and "not supported" in val:
-        return ''  # Clear unsupported fields
+    elif isinstance(val, str):
+        if val.startswith("Field '") and "not supported" in val:
+            return ''  # Clear unsupported fields
+        # Also clear other common unsupported or error strings if needed
+        unsupported_strings = [
+            "Field 'region' is not supported",
+            "Field 'region_code' is not supported",
+            "Field 'postal' is not supported",
+            "Field 'timezone' is not supported",
+            "Field 'country_code' is not supported",
+            "Field 'in_eu' is not supported",
+            "Field 'country_area' is not supported",
+            "Field 'country_population' is not supported"
+        ]
+        if val in unsupported_strings:
+            return ''
     return str(val)
 
 def safe_str(value):
@@ -428,7 +442,20 @@ def safe_str(value):
     if value is None:
         return ''
     # Decode HTML entities to proper characters
-    return html.unescape(str(value))
+    value_str = html.unescape(str(value))
+    unsupported_strings = [
+        "Field 'region' is not supported",
+        "Field 'region_code' is not supported",
+        "Field 'postal' is not supported",
+        "Field 'timezone' is not supported",
+        "Field 'country_code' is not supported",
+        "Field 'in_eu' is not supported",
+        "Field 'country_area' is not supported",
+        "Field 'country_population' is not supported"
+    ]
+    if value_str in unsupported_strings:
+        return ''
+    return value_str
 
 @app.route('/track/<short_id>')
 def track(short_id):
