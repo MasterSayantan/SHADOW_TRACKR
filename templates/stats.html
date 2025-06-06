@@ -228,23 +228,34 @@
           country_population: "{{ visit.country_population | e | replace("Field 'region' is not supported", "") | replace("Field 'region_code' is not supported", "") | replace("Field 'postal' is not supported", "") | replace("Field 'timezone' is not supported", "") | replace("Field 'country_code' is not supported", "") | replace("Field 'in_eu' is not supported", "") | replace("Field 'country_area' is not supported", "") | replace("Field 'country_population' is not supported", "") or '' }}",
           asn: "{{ visit.asn | e | replace("Field 'region' is not supported", "") | replace("Field 'region_code' is not supported", "") | replace("Field 'postal' is not supported", "") | replace("Field 'timezone' is not supported", "") | replace("Field 'country_code' is not supported", "") | replace("Field 'in_eu' is not supported", "") | replace("Field 'country_area' is not supported", "") | replace("Field 'country_population' is not supported", "") or '' }}",
           organization: "{{ visit.isp | e | replace("Field 'region' is not supported", "") | replace("Field 'region_code' is not supported", "") | replace("Field 'postal' is not supported", "") | replace("Field 'timezone' is not supported", "") | replace("Field 'country_code' is not supported", "") | replace("Field 'in_eu' is not supported", "") | replace("Field 'country_area' is not supported", "") | replace("Field 'country_population' is not supported", "") or '' }}"
-          screen_size: "{{ visit.screen_size | default('') | e | replace("Field 'region' is not supported", "") | replace("Field 'region_code' is not supported", "") | replace("Field 'postal' is not supported", "") | replace("Field 'timezone' is not supported", "") | replace("Field 'country_code' is not supported", "") | replace("Field 'in_eu' is not supported", "") | replace("Field 'country_area' is not supported", "") | replace("Field 'country_population' is not supported", "") }}",
-          color_scheme: "{{ visit.color_scheme | default('') | e | replace("Field 'region' is not supported", "") | replace("Field 'region_code' is not supported", "") | replace("Field 'postal' is not supported", "") | replace("Field 'timezone' is not supported", "") | replace("Field 'country_code' is not supported", "") | replace("Field 'in_eu' is not supported", "") | replace("Field 'country_area' is not supported", "") | replace("Field 'country_population' is not supported", "") }}",
-          hdr_screen: "{{ visit.hdr_screen | default('') | e | replace("Field 'region' is not supported", "") | replace("Field 'region_code' is not supported", "") | replace("Field 'postal' is not supported", "") | replace("Field 'timezone' is not supported", "") | replace("Field 'country_code' is not supported", "") | replace("Field 'in_eu' is not supported", "") | replace("Field 'country_area' is not supported", "") | replace("Field 'country_population' is not supported", "") }}",
-          gpu: "{{ visit.gpu | default('') | e | replace("Field 'region' is not supported", "") | replace("Field 'region_code' is not supported", "") | replace("Field 'postal' is not supported", "") | replace("Field 'timezone' is not supported", "") | replace("Field 'country_code' is not supported", "") | replace("Field 'in_eu' is not supported", "") | replace("Field 'country_area' is not supported", "") | replace("Field 'country_population' is not supported", "") }}",
-          platform: "{{ visit.platform | default('') | e | replace("Field 'region' is not supported", "") | replace("Field 'region_code' is not supported", "") | replace("Field 'postal' is not supported", "") | replace("Field 'timezone' is not supported", "") | replace("Field 'country_code' is not supported", "") | replace("Field 'in_eu' is not supported", "") | replace("Field 'country_area' is not supported", "") | replace("Field 'country_population' is not supported", "") }}",
-          user_time: "{{ visit.user_time | default('') | e | replace("Field 'region' is not supported", "") | replace("Field 'region_code' is not supported", "") | replace("Field 'postal' is not supported", "") | replace("Field 'timezone' is not supported", "") | replace("Field 'country_code' is not supported", "") | replace("Field 'in_eu' is not supported", "") | replace("Field 'country_area' is not supported", "") | replace("Field 'country_population' is not supported", "") }}",
-          incognito: "{{ visit.incognito | default('') | e | replace("Field 'region' is not supported", "") | replace("Field 'region_code' is not supported", "") | replace("Field 'postal' is not supported", "") | replace("Field 'timezone' is not supported", "") | replace("Field 'country_code' is not supported", "") | replace("Field 'in_eu' is not supported", "") | replace("Field 'country_area' is not supported", "") | replace("Field 'country_population' is not supported", "") }}",
-          ad_blocker: "{{ visit.ad_blocker | default('') | e | replace("Field 'region' is not supported", "") | replace("Field 'region_code' is not supported", "") | replace("Field 'postal' is not supported", "") | replace("Field 'timezone' is not supported", "") | replace("Field 'country_code' is not supported", "") | replace("Field 'in_eu' is not supported", "") | replace("Field 'country_area' is not supported", "") | replace("Field 'country_population' is not supported", "") }}",
-          orientation: "{{ visit.orientation | default('') | e | replace("Field 'region' is not supported", "") | replace("Field 'region_code' is not supported", "") | replace("Field 'postal' is not supported", "") | replace("Field 'timezone' is not supported", "") | replace("Field 'country_code' is not supported", "") | replace("Field 'in_eu' is not supported", "") | replace("Field 'country_area' is not supported", "") | replace("Field 'country_population' is not supported", "") }}"
         },
         {% endfor %}
       };
 
       function showDetails(visitId) {
+        console.log("showDetails called with visitId:", visitId);
         const details = visitsData[visitId];
+        if (!details) {
+          console.error("No details found for visitId:", visitId);
+          alert("No details available for this visit.");
+          return;
+        }
         const detailsBody = document.getElementById('detailsBody');
+        if (!detailsBody) {
+          console.error("detailsBody element not found");
+          alert("Details container not found.");
+          return;
+        }
         detailsBody.innerHTML = '';
+
+        // Show the modal
+        const modal = document.getElementById('detailsModal');
+        if (!modal) {
+          console.error("detailsModal element not found");
+          alert("Details modal not found.");
+          return;
+        }
+        modal.style.display = 'block';
 
         function addSectionHeader(title) {
           const headerRow = document.createElement('tr');
