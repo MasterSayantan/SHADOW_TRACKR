@@ -79,6 +79,15 @@ import os
 # Cache for IP info to prevent repeat lookups
 _ip_info_cache = {}
 
+def sanitize_field(value):
+    if isinstance(value, str) and "Field" in value and "not supported" in value:
+        return ''
+    elif isinstance(value, dict):
+        return str(value)
+    elif value is None:
+        return ''
+    return value
+
 def get_ip_info(ip):
     """
     Fetch extended IP metadata including region, region_code, postal_code, utc_offset, network, asn, country_iso_code, capital, tld, continent, eu, currency, country_area, country_population.
