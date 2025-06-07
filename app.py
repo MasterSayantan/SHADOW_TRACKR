@@ -117,15 +117,39 @@ def get_ip_info(ip):
         'longitude': ''
     }
     try:
-        if ip == '127.0.0.1' or ip == '::1':
-            info['country'] = 'Localhost'
-            info['city'] = 'Localhost'
-            info['hostname'] = 'Localhost'
-            info['isp'] = 'Localhost'
-            info['latitude'] = ''
-            info['longitude'] = ''
-            _ip_info_cache[ip] = info
-            return info
+        # Try ipgeolocation.io first if API key is present
+        if API_KEY:
+            response = requests.get(
+                f'https://api.ipgeolocation.io/ipgeo?apiKey={API_KEY}&ip={ip}&fields=city,country_name,isp,hostname,latitude,longitude,region,region_code,postal,timezone,country_code,country_capital,country_tld,continent_code,in_eu,currency,country_area,country_population,asn'
+            )
+            if response.status_code == 200:
+                data = response.json()
+                info['country'] = data.get('country_name', info['country'])
+                info['city'] = data.get('city', info['city'])
+                info['region'] = data.get('region', info['region'])
+                info['region_code'] = data.get('region_code', info['region_code'])
+                info['postal_code'] = data.get('postal', info['postal_code'])
+                info['network'] = data.get('org', info['network'])
+                info['asn'] = data.get('asn', info['asn'])
+                info['hostname'] = data.get('hostname', info['hostname'])
+                info['isp'] = data.get('isp', info['isp'])
+                info['latitude'] = data.get('latitude', info['latitude'])
+                info['longitude'] = data.get('longitude', info['longitude'])
+                info['utc_offset'] = data.get('timezone', info['utc_offset'])
+                info['country_iso_code'] = data.get('country_code', info['country_iso_code'])
+                info['capital'] = data.get('country_capital', info['capital'])
+                info['tld'] = data.get('country_tld', info['tld'])
+                info['continent'] = data.get('continent_code', info['continent'])
+                info['eu'] = data.get('in_eu', info['eu'])
+                info['currency'] = data.get('currency', info['currency'])
+                info['country_area'] = data.get('country_area', info['country_area'])
+                info['country_population'] = data.get('country_population', info['country_population'])
+                _ip_info_cache[ip] = info
+                return info
+            elif response.status_code == 429:
+                logging.error(f"API quota exceeded for ipgeolocation.io on IP {ip}")
+        # ...then try ipapi.co and ipinfo.io as fallback...
+        # (keep your existing fallback code here)
         for attempt in range(2):  # Try twice
             try:
                 response = requests.get(f'https://ipapi.co/{ip}/json/')
