@@ -1,5 +1,6 @@
 from flask import Flask, request, redirect, render_template, url_for, jsonify
 from flask_sqlalchemy import SQLAlchemy
+from flask_migrate import Migrate
 from sqlalchemy.sql import func
 import string
 import random
@@ -15,6 +16,7 @@ app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///grabify.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
+migrate = Migrate(app, db)
 
 # Models
 class URLMap(db.Model):
@@ -117,39 +119,15 @@ def get_ip_info(ip):
         'longitude': ''
     }
     try:
-        # Try ipgeolocation.io first if API key is present
-        if API_KEY:
-            response = requests.get(
-                f'https://api.ipgeolocation.io/ipgeo?apiKey={API_KEY}&ip={ip}&fields=city,country_name,isp,hostname,latitude,longitude,region,region_code,postal,timezone,country_code,country_capital,country_tld,continent_code,in_eu,currency,country_area,country_population,asn'
-            )
-            if response.status_code == 200:
-                data = response.json()
-                info['country'] = data.get('country_name', info['country'])
-                info['city'] = data.get('city', info['city'])
-                info['region'] = data.get('region', info['region'])
-                info['region_code'] = data.get('region_code', info['region_code'])
-                info['postal_code'] = data.get('postal', info['postal_code'])
-                info['network'] = data.get('org', info['network'])
-                info['asn'] = data.get('asn', info['asn'])
-                info['hostname'] = data.get('hostname', info['hostname'])
-                info['isp'] = data.get('isp', info['isp'])
-                info['latitude'] = data.get('latitude', info['latitude'])
-                info['longitude'] = data.get('longitude', info['longitude'])
-                info['utc_offset'] = data.get('timezone', info['utc_offset'])
-                info['country_iso_code'] = data.get('country_code', info['country_iso_code'])
-                info['capital'] = data.get('country_capital', info['capital'])
-                info['tld'] = data.get('country_tld', info['tld'])
-                info['continent'] = data.get('continent_code', info['continent'])
-                info['eu'] = data.get('in_eu', info['eu'])
-                info['currency'] = data.get('currency', info['currency'])
-                info['country_area'] = data.get('country_area', info['country_area'])
-                info['country_population'] = data.get('country_population', info['country_population'])
-                _ip_info_cache[ip] = info
-                return info
-            elif response.status_code == 429:
-                logging.error(f"API quota exceeded for ipgeolocation.io on IP {ip}")
-        # ...then try ipapi.co and ipinfo.io as fallback...
-        # (keep your existing fallback code here)
+        if ip == '127.0.0.1' or ip == '::1':
+            info['country'] = 'Localhost'
+            info['city'] = 'Localhost'
+            info['hostname'] = 'Localhost'
+            info['isp'] = 'Localhost'
+            info['latitude'] = ''
+            info['longitude'] = ''
+            _ip_info_cache[ip] = info
+            return info
         for attempt in range(2):  # Try twice
             try:
                 response = requests.get(f'https://ipapi.co/{ip}/json/')
@@ -187,6 +165,13 @@ def get_ip_info(ip):
                         info['country_area'] = ''
                     else:
                         info['country_area'] = str(country_area_data)
+
+                    # Ensure postal_code is string, not dict
+                    postal_code_data = data.get('postal_code', '')
+                    if isinstance(postal_code_data, dict):
+                        info['postal_code'] = ''
+                    else:
+                        info['postal_code'] = str(postal_code_data)
 
                     # Ensure country_population is string, not dict
                     country_population_data = data.get('country_population', '')
@@ -297,63 +282,8 @@ def get_ip_info(ip):
         logging.error(f"Error fetching IP info for {ip}: {e}")
     return info
 
-def safe_str(value, key=None):
-    # Handle dicts for currency and similar fields
-    if isinstance(value, dict):
-        if key and key in value:
-            return str(value[key])
-        # For currency, prefer 'code'
-        if 'code' in value:
-            return str(value['code'])
-        return str(value)
-    if value is None:
-        return ''
-    # Handle API error messages like "Field 'region' is not supported"
-    if isinstance(value, str) and "not supported" in value:
-        return ''
-    return str(value)
-
 # Add error handling around DB insertion in track route
 # Removed duplicate track route definition to fix endpoint overwrite error
-def track(short_id):
-    urlmap = URLMap.query.filter_by(short_id=short_id).first_or_404()
-    ip = get_client_ip()
-    ua_string = request.headers.get('User-Agent', '')
-    ua = user_agents.parse(ua_string)
-    ip_info = get_ip_info(ip)
-    # Create visit with basic info first
-    visit = Visit(
-        urlmap_id=urlmap.id,
-        ip_address=ip,
-        user_agent=ua_string,
-        browser=f"{ua.browser.family} {ua.browser.version_string}",
-        os=f"{ua.os.family} {ua.os.version_string}",
-        referrer=request.referrer or '',
-        country=ip_info['country'],
-        city=ip_info['city'],
-        region=ip_info.get('region', ''),
-        region_code=ip_info.get('region_code', ''),
-        postal_code=ip_info.get('postal_code', ''),
-        utc_offset=ip_info.get('utc_offset', ''),
-        network=ip_info.get('network', ''),
-        asn=ip_info.get('asn', ''),
-        country_iso_code=ip_info.get('country_iso_code', ''),
-        capital=ip_info.get('capital', ''),
-        tld=ip_info.get('tld', ''),
-        continent=ip_info.get('continent', ''),
-        eu=ip_info.get('eu', ''),
-        currency=ip_info.get('currency', ''),
-        country_area=ip_info.get('country_area', ''),
-        country_population=ip_info.get('country_population', ''),
-        latitude=ip_info['latitude'],
-        longitude=ip_info['longitude'],
-        hostname=ip_info['hostname'],
-        isp=ip_info['isp']
-    )
-    db.session.add(visit)
-    db.session.commit()
-    # Serve a tracking page with JS to collect advanced info and send to backend
-    return render_template('track.html', short_id=short_id)
 def track(short_id):
     urlmap = URLMap.query.filter_by(short_id=short_id).first_or_404()
     ip = get_client_ip()
@@ -368,26 +298,26 @@ def track(short_id):
             browser=f"{ua.browser.family} {ua.browser.version_string}",
             os=f"{ua.os.family} {ua.os.version_string}",
             referrer=request.referrer or '',
-            country=safe_str(ip_info.get('country', '')),
-            city=safe_str(ip_info.get('city', '')),
-            region=safe_str(ip_info.get('region', '')),
-            region_code=safe_str(ip_info.get('region_code', '')),
-            postal_code=safe_str(ip_info.get('postal_code', '')),
-            utc_offset=safe_str(ip_info.get('utc_offset', '')),
-            network=safe_str(ip_info.get('network', '')),
-            asn=safe_str(ip_info.get('asn', '')),
-            country_iso_code=safe_str(ip_info.get('country_iso_code', '')),
-            capital=safe_str(ip_info.get('capital', '')),
-            tld=safe_str(ip_info.get('tld', '')),
-            continent=safe_str(ip_info.get('continent', '')),
-            eu=safe_str(ip_info.get('eu', '')),
-            currency=safe_str(ip_info.get('currency', ''), key='code'),
-            country_area=safe_str(ip_info.get('country_area', '')),
-            country_population=safe_str(ip_info.get('country_population', '')),
-            latitude=safe_str(ip_info.get('latitude', '')),
-            longitude=safe_str(ip_info.get('longitude', '')),
-            hostname=safe_str(ip_info.get('hostname', '')),
-            isp=safe_str(ip_info.get('isp', ''))
+            country=ip_info['country'],
+            city=ip_info['city'],
+            region=ip_info.get('region', ''),
+            region_code=ip_info.get('region_code', ''),
+            postal_code=ip_info.get('postal_code', ''),
+            utc_offset=ip_info.get('utc_offset', ''),
+            network=ip_info.get('network', ''),
+            asn=ip_info.get('asn', ''),
+            country_iso_code=ip_info.get('country_iso_code', ''),
+            capital=ip_info.get('capital', ''),
+            tld=ip_info.get('tld', ''),
+            continent=ip_info.get('continent', ''),
+            eu=ip_info.get('eu', ''),
+            currency=ip_info.get('currency', ''),
+            country_area=ip_info.get('country_area', ''),
+            country_population=ip_info.get('country_population', ''),
+            latitude=ip_info['latitude'],
+            longitude=ip_info['longitude'],
+            hostname=ip_info['hostname'],
+            isp=ip_info['isp']
         )
         db.session.add(visit)
         db.session.commit()
@@ -431,6 +361,14 @@ def index():
         return render_template('index.html', short_url=url_for('track', short_id=urlmap.short_id, _external=True))
     return render_template('index.html')
 
+def safe_str(value):
+    if isinstance(value, dict):
+        logging.warning(f"Converting dict to string for value: {value}")
+        return str(value)
+    if value is None:
+        return ''
+    return str(value)
+
 @app.route('/track/<short_id>')
 def track(short_id):
     urlmap = URLMap.query.filter_by(short_id=short_id).first_or_404()
@@ -459,7 +397,7 @@ def track(short_id):
             tld=safe_str(ip_info.get('tld', '')),
             continent=safe_str(ip_info.get('continent', '')),
             eu=safe_str(ip_info.get('eu', '')),
-            currency=safe_str(ip_info.get('currency', ''), key='code'),
+            currency=safe_str(ip_info.get('currency', '')),
             country_area=safe_str(ip_info.get('country_area', '')),
             country_population=safe_str(ip_info.get('country_population', '')),
             latitude=safe_str(ip_info.get('latitude', '')),
@@ -481,6 +419,7 @@ def track_data(short_id):
     if not data:
         return jsonify({'error': 'No data provided'}), 400
 
+    # Find the latest visit for this URL and update with advanced data
     visit = Visit.query.filter_by(urlmap_id=urlmap.id).order_by(Visit.timestamp.desc()).first()
     if not visit:
         return jsonify({'error': 'No visit found to update'}), 404
@@ -497,9 +436,18 @@ def track_data(short_id):
     visit.ad_blocker = data.get('ad_blocker')
     visit.orientation = data.get('orientation')
 
+    # Update city, country, hostname, ISP, latitude, longitude and other metadata always to ensure latest data
     try:
         ip = visit.ip_address
         ip_info = get_ip_info(ip)
+
+        # Convert dict fields to strings if necessary
+        def safe_str(value):
+            if isinstance(value, dict):
+                return str(value)
+            if value is None:
+                return ''
+            return str(value)
 
         visit.country = safe_str(ip_info.get('country', ''))
         visit.city = safe_str(ip_info.get('city', ''))
@@ -514,8 +462,7 @@ def track_data(short_id):
         visit.tld = safe_str(ip_info.get('tld', ''))
         visit.continent = safe_str(ip_info.get('continent', ''))
         visit.eu = safe_str(ip_info.get('eu', ''))
-        # For currency, always extract 'code' if dict
-        visit.currency = safe_str(ip_info.get('currency', ''), key='code')
+        visit.currency = safe_str(ip_info.get('currency', ''))
         visit.country_area = safe_str(ip_info.get('country_area', ''))
         visit.country_population = safe_str(ip_info.get('country_population', ''))
         visit.hostname = safe_str(ip_info.get('hostname', ''))
@@ -546,20 +493,40 @@ def pixel(short_id):
     ua_string = request.headers.get('User-Agent', '')
     ua = user_agents.parse(ua_string)
     ip_info = get_ip_info(ip)
-    visit = Visit(
-        urlmap_id=urlmap.id,
-        ip_address=ip,
-        user_agent=ua_string,
-        browser=f"{ua.browser.family} {ua.browser.version_string}",
-        os=f"{ua.os.family} {ua.os.version_string}",
-        referrer=request.referrer or '',
-        country=ip_info['country'],
-        city=ip_info['city'],
-        hostname=ip_info['hostname'],
-        isp=ip_info['isp']
-    )
-    db.session.add(visit)
-    db.session.commit()
+    try:
+        visit = Visit(
+            urlmap_id=urlmap.id,
+            ip_address=ip,
+            user_agent=ua_string,
+            browser=f"{ua.browser.family} {ua.browser.version_string}",
+            os=f"{ua.os.family} {ua.os.version_string}",
+            referrer=request.referrer or '',
+            country=safe_str(ip_info.get('country', '')),
+            city=safe_str(ip_info.get('city', '')),
+            region=safe_str(ip_info.get('region', '')),
+            region_code=safe_str(ip_info.get('region_code', '')),
+            postal_code=safe_str(ip_info.get('postal_code', '')),
+            utc_offset=safe_str(ip_info.get('utc_offset', '')),
+            network=safe_str(ip_info.get('network', '')),
+            asn=safe_str(ip_info.get('asn', '')),
+            country_iso_code=safe_str(ip_info.get('country_iso_code', '')),
+            capital=safe_str(ip_info.get('capital', '')),
+            tld=safe_str(ip_info.get('tld', '')),
+            continent=safe_str(ip_info.get('continent', '')),
+            eu=safe_str(ip_info.get('eu', '')),
+            currency=safe_str(ip_info.get('currency', '')),
+            country_area=safe_str(ip_info.get('country_area', '')),
+            country_population=safe_str(ip_info.get('country_population', '')),
+            latitude=safe_str(ip_info.get('latitude', '')),
+            longitude=safe_str(ip_info.get('longitude', '')),
+            hostname=safe_str(ip_info.get('hostname', '')),
+            isp=safe_str(ip_info.get('isp', ''))
+        )
+        db.session.add(visit)
+        db.session.commit()
+    except Exception as e:
+        logging.error(f"Error inserting visit record: {e}")
+        db.session.rollback()
     # Return a 1x1 transparent PNG
     pixel_data = b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01' \
                  b'\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89' \
@@ -569,5 +536,10 @@ def pixel(short_id):
 
 if __name__ == '__main__':
     with app.app_context():
+        # Temporary: create tables on startup for ephemeral DB (no data persistence)
         db.create_all()
+        print("Tables created successfully. This is a temporary setup; data will not persist across deploys.")
     app.run(debug=True)
+
+# Temporary fix for Render.com deployment to create tables on startup
+# (This block is already inside the main block, so this line is redundant and removed)
