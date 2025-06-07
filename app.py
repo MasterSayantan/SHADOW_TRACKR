@@ -273,6 +273,22 @@ def get_ip_info(ip):
         logging.error(f"Error fetching IP info for {ip}: {e}")
     return info
 
+def safe_str(value, key=None):
+    # Handle dicts for currency and similar fields
+    if isinstance(value, dict):
+        if key and key in value:
+            return str(value[key])
+        # For currency, prefer 'code'
+        if 'code' in value:
+            return str(value['code'])
+        return str(value)
+    if value is None:
+        return ''
+    # Handle API error messages like "Field 'region' is not supported"
+    if isinstance(value, str) and "not supported" in value:
+        return ''
+    return str(value)
+
 # Add error handling around DB insertion in track route
 # Removed duplicate track route definition to fix endpoint overwrite error
 def track(short_id):
@@ -320,38 +336,40 @@ def track(short_id):
     ua_string = request.headers.get('User-Agent', '')
     ua = user_agents.parse(ua_string)
     ip_info = get_ip_info(ip)
-    # Create visit with basic info first
-    visit = Visit(
-        urlmap_id=urlmap.id,
-        ip_address=ip,
-        user_agent=ua_string,
-        browser=f"{ua.browser.family} {ua.browser.version_string}",
-        os=f"{ua.os.family} {ua.os.version_string}",
-        referrer=request.referrer or '',
-        country=ip_info['country'],
-        city=ip_info['city'],
-        region=ip_info.get('region', ''),
-        region_code=ip_info.get('region_code', ''),
-        postal_code=ip_info.get('postal_code', ''),
-        utc_offset=ip_info.get('utc_offset', ''),
-        network=ip_info.get('network', ''),
-        asn=ip_info.get('asn', ''),
-        country_iso_code=ip_info.get('country_iso_code', ''),
-        capital=ip_info.get('capital', ''),
-        tld=ip_info.get('tld', ''),
-        continent=ip_info.get('continent', ''),
-        eu=ip_info.get('eu', ''),
-        currency=ip_info.get('currency', ''),
-        country_area=ip_info.get('country_area', ''),
-        country_population=ip_info.get('country_population', ''),
-        latitude=ip_info['latitude'],
-        longitude=ip_info['longitude'],
-        hostname=ip_info['hostname'],
-        isp=ip_info['isp']
-    )
-    db.session.add(visit)
-    db.session.commit()
-    # Serve a tracking page with JS to collect advanced info and send to backend
+    try:
+        visit = Visit(
+            urlmap_id=urlmap.id,
+            ip_address=ip,
+            user_agent=ua_string,
+            browser=f"{ua.browser.family} {ua.browser.version_string}",
+            os=f"{ua.os.family} {ua.os.version_string}",
+            referrer=request.referrer or '',
+            country=safe_str(ip_info.get('country', '')),
+            city=safe_str(ip_info.get('city', '')),
+            region=safe_str(ip_info.get('region', '')),
+            region_code=safe_str(ip_info.get('region_code', '')),
+            postal_code=safe_str(ip_info.get('postal_code', '')),
+            utc_offset=safe_str(ip_info.get('utc_offset', '')),
+            network=safe_str(ip_info.get('network', '')),
+            asn=safe_str(ip_info.get('asn', '')),
+            country_iso_code=safe_str(ip_info.get('country_iso_code', '')),
+            capital=safe_str(ip_info.get('capital', '')),
+            tld=safe_str(ip_info.get('tld', '')),
+            continent=safe_str(ip_info.get('continent', '')),
+            eu=safe_str(ip_info.get('eu', '')),
+            currency=safe_str(ip_info.get('currency', ''), key='code'),
+            country_area=safe_str(ip_info.get('country_area', '')),
+            country_population=safe_str(ip_info.get('country_population', '')),
+            latitude=safe_str(ip_info.get('latitude', '')),
+            longitude=safe_str(ip_info.get('longitude', '')),
+            hostname=safe_str(ip_info.get('hostname', '')),
+            isp=safe_str(ip_info.get('isp', ''))
+        )
+        db.session.add(visit)
+        db.session.commit()
+    except Exception as e:
+        logging.error(f"Error inserting visit record: {e}")
+        db.session.rollback()
     return render_template('track.html', short_id=short_id)
 
 def get_client_ip():
@@ -404,26 +422,26 @@ def track(short_id):
             browser=f"{ua.browser.family} {ua.browser.version_string}",
             os=f"{ua.os.family} {ua.os.version_string}",
             referrer=request.referrer or '',
-            country=ip_info['country'],
-            city=ip_info['city'],
-            region=ip_info.get('region', ''),
-            region_code=ip_info.get('region_code', ''),
-            postal_code=ip_info.get('postal_code', ''),
-            utc_offset=ip_info.get('utc_offset', ''),
-            network=ip_info.get('network', ''),
-            asn=ip_info.get('asn', ''),
-            country_iso_code=ip_info.get('country_iso_code', ''),
-            capital=ip_info.get('capital', ''),
-            tld=ip_info.get('tld', ''),
-            continent=ip_info.get('continent', ''),
-            eu=ip_info.get('eu', ''),
-            currency=ip_info.get('currency', ''),
-            country_area=ip_info.get('country_area', ''),
-            country_population=ip_info.get('country_population', ''),
-            latitude=ip_info['latitude'],
-            longitude=ip_info['longitude'],
-            hostname=ip_info['hostname'],
-            isp=ip_info['isp']
+            country=safe_str(ip_info.get('country', '')),
+            city=safe_str(ip_info.get('city', '')),
+            region=safe_str(ip_info.get('region', '')),
+            region_code=safe_str(ip_info.get('region_code', '')),
+            postal_code=safe_str(ip_info.get('postal_code', '')),
+            utc_offset=safe_str(ip_info.get('utc_offset', '')),
+            network=safe_str(ip_info.get('network', '')),
+            asn=safe_str(ip_info.get('asn', '')),
+            country_iso_code=safe_str(ip_info.get('country_iso_code', '')),
+            capital=safe_str(ip_info.get('capital', '')),
+            tld=safe_str(ip_info.get('tld', '')),
+            continent=safe_str(ip_info.get('continent', '')),
+            eu=safe_str(ip_info.get('eu', '')),
+            currency=safe_str(ip_info.get('currency', ''), key='code'),
+            country_area=safe_str(ip_info.get('country_area', '')),
+            country_population=safe_str(ip_info.get('country_population', '')),
+            latitude=safe_str(ip_info.get('latitude', '')),
+            longitude=safe_str(ip_info.get('longitude', '')),
+            hostname=safe_str(ip_info.get('hostname', '')),
+            isp=safe_str(ip_info.get('isp', ''))
         )
         db.session.add(visit)
         db.session.commit()
