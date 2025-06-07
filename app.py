@@ -361,11 +361,23 @@ def index():
         return render_template('index.html', short_url=url_for('track', short_id=urlmap.short_id, _external=True))
     return render_template('index.html')
 
-def safe_str(value):
+def safe_str(value, key=None):
+    """
+    Safely convert API values to string for DB and display.
+    - If value is a dict, extract key if provided, else 'code' if present, else str(value).
+    - If value is None, return empty string.
+    - If value is an error message like "Field 'region' is not supported", return empty string.
+    - Otherwise, return str(value).
+    """
     if isinstance(value, dict):
-        logging.warning(f"Converting dict to string for value: {value}")
-        return str(value)
+        if key and key in value:
+            return str(value[key])
+        if 'code' in value:
+            return str(value['code'])
+        return ''
     if value is None:
+        return ''
+    if isinstance(value, str) and ("not supported" in value or "Field" in value):
         return ''
     return str(value)
 
@@ -397,7 +409,7 @@ def track(short_id):
             tld=safe_str(ip_info.get('tld', '')),
             continent=safe_str(ip_info.get('continent', '')),
             eu=safe_str(ip_info.get('eu', '')),
-            currency=safe_str(ip_info.get('currency', '')),
+            currency=safe_str(ip_info.get('currency', ''), key='code'),
             country_area=safe_str(ip_info.get('country_area', '')),
             country_population=safe_str(ip_info.get('country_population', '')),
             latitude=safe_str(ip_info.get('latitude', '')),
@@ -419,7 +431,6 @@ def track_data(short_id):
     if not data:
         return jsonify({'error': 'No data provided'}), 400
 
-    # Find the latest visit for this URL and update with advanced data
     visit = Visit.query.filter_by(urlmap_id=urlmap.id).order_by(Visit.timestamp.desc()).first()
     if not visit:
         return jsonify({'error': 'No visit found to update'}), 404
@@ -436,19 +447,9 @@ def track_data(short_id):
     visit.ad_blocker = data.get('ad_blocker')
     visit.orientation = data.get('orientation')
 
-    # Update city, country, hostname, ISP, latitude, longitude and other metadata always to ensure latest data
     try:
         ip = visit.ip_address
         ip_info = get_ip_info(ip)
-
-        # Convert dict fields to strings if necessary
-        def safe_str(value):
-            if isinstance(value, dict):
-                return str(value)
-            if value is None:
-                return ''
-            return str(value)
-
         visit.country = safe_str(ip_info.get('country', ''))
         visit.city = safe_str(ip_info.get('city', ''))
         visit.region = safe_str(ip_info.get('region', ''))
@@ -462,7 +463,7 @@ def track_data(short_id):
         visit.tld = safe_str(ip_info.get('tld', ''))
         visit.continent = safe_str(ip_info.get('continent', ''))
         visit.eu = safe_str(ip_info.get('eu', ''))
-        visit.currency = safe_str(ip_info.get('currency', ''))
+        visit.currency = safe_str(ip_info.get('currency', ''), key='code')
         visit.country_area = safe_str(ip_info.get('country_area', ''))
         visit.country_population = safe_str(ip_info.get('country_population', ''))
         visit.hostname = safe_str(ip_info.get('hostname', ''))
@@ -514,7 +515,7 @@ def pixel(short_id):
             tld=safe_str(ip_info.get('tld', '')),
             continent=safe_str(ip_info.get('continent', '')),
             eu=safe_str(ip_info.get('eu', '')),
-            currency=safe_str(ip_info.get('currency', '')),
+            currency=safe_str(ip_info.get('currency', ''), key='code'),
             country_area=safe_str(ip_info.get('country_area', '')),
             country_population=safe_str(ip_info.get('country_population', '')),
             latitude=safe_str(ip_info.get('latitude', '')),
